@@ -5,6 +5,7 @@
 import { WebSocket } from 'ws';
 import { EventEmitter } from 'events';
 import { ServerEventSchema, type ServerEvent } from '../shared/protocol.js';
+import { type AgentMetadata } from '../shared/agent-metadata.js';
 
 /**
  * Configuration for the agent client
@@ -14,6 +15,7 @@ export interface AgentClientConfig {
   agentName: string;
   role: string;
   serverUrl: string;
+  metadata?: AgentMetadata; // Optional metadata to send on join
 }
 
 /**
@@ -133,6 +135,78 @@ export class AgentClient extends EventEmitter {
   }
 
   /**
+   * Create a proposal
+   * @param title Proposal title
+   * @param description Proposal description
+   * @param threshold Optional approval threshold (0.0 to 1.0)
+   * @returns Promise<boolean> - true if sent successfully, false otherwise
+   */
+  async createProposal(
+    title: string,
+    description: string,
+    threshold?: number,
+  ): Promise<boolean> {
+    if (!this._isConnected || !this.ws) {
+      return false;
+    }
+
+    try {
+      const command: any = {
+        type: 'CREATE_PROPOSAL',
+        agentId: this.config.agentId,
+        title,
+        description,
+        timestamp: Date.now(),
+      };
+      if (threshold !== undefined) {
+        command.threshold = threshold;
+      }
+
+      this.ws.send(JSON.stringify(command));
+      return true;
+    } catch (error) {
+      this.emit('error', error as Error);
+      return false;
+    }
+  }
+
+  /**
+   * Vote on a proposal
+   * @param proposalId ID of the proposal to vote on
+   * @param vote Vote type ('yes', 'no', or 'abstain')
+   * @param rationale Optional explanation for the vote
+   * @returns Promise<boolean> - true if sent successfully, false otherwise
+   */
+  async vote(
+    proposalId: string,
+    vote: 'yes' | 'no' | 'abstain',
+    rationale?: string,
+  ): Promise<boolean> {
+    if (!this._isConnected || !this.ws) {
+      return false;
+    }
+
+    try {
+      const command: any = {
+        type: 'VOTE',
+        agentId: this.config.agentId,
+        proposalId,
+        vote,
+        timestamp: Date.now(),
+      };
+      if (rationale !== undefined) {
+        command.rationale = rationale;
+      }
+
+      this.ws.send(JSON.stringify(command));
+      return true;
+    } catch (error) {
+      this.emit('error', error as Error);
+      return false;
+    }
+  }
+
+  /**
    * Set up WebSocket event listeners
    */
   private setupListeners(): void {
@@ -169,6 +243,7 @@ export class AgentClient extends EventEmitter {
         this.emit('welcome', {
           roomId: event.roomId,
           topic: event.topic,
+          mode: event.mode,
           agentCount: event.agentCount,
         });
         break;
@@ -178,6 +253,15 @@ export class AgentClient extends EventEmitter {
           agentId: event.agentId,
           agentName: event.agentName,
           role: event.role,
+          metadata: event.metadata,
+        });
+        break;
+
+      case 'AGENT_METADATA_UPDATED':
+        this.emit('agent_metadata_updated', {
+          agentId: event.agentId,
+          agentName: event.agentName,
+          metadata: event.metadata,
         });
         break;
 
@@ -197,9 +281,70 @@ export class AgentClient extends EventEmitter {
         });
         break;
 
+      case 'PROPOSAL_CREATED':
+        this.emit('proposal_created', {
+          proposalId: event.proposalId,
+          title: event.title,
+          description: event.description,
+          proposerId: event.proposerId,
+          proposerName: event.proposerName,
+          threshold: event.threshold,
+        });
+        break;
+
+      case 'VOTE_CAST':
+        this.emit('vote_cast', {
+          proposalId: event.proposalId,
+          agentId: event.agentId,
+          agentName: event.agentName,
+          vote: event.vote,
+          rationale: event.rationale,
+        });
+        break;
+
+      case 'PROPOSAL_RESOLVED':
+        this.emit('proposal_resolved', {
+          proposalId: event.proposalId,
+          title: event.title,
+          status: event.status,
+          yesVotes: event.yesVotes,
+          noVotes: event.noVotes,
+          abstainVotes: event.abstainVotes,
+          totalVotes: event.totalVotes,
+        });
+        break;
+
       case 'ERROR':
         this.emit('error', new Error(event.message));
         break;
+    }
+  }
+
+  /**
+   * Update agent metadata
+   * @param metadata Updated agent metadata
+   * @returns Promise<boolean> - true if sent successfully, false otherwise
+   */
+  async updateMetadata(metadata: AgentMetadata): Promise<boolean> {
+    if (!this._isConnected || !this.ws) {
+      return false;
+    }
+
+    try {
+      this.ws.send(
+        JSON.stringify({
+          type: 'UPDATE_METADATA',
+          agentId: this.config.agentId,
+          metadata,
+          timestamp: Date.now(),
+        }),
+      );
+      // Update local config metadata
+      this.config.metadata = metadata;
+      return true;
+    } catch (error) {
+      this.emit('error', error as Error);
+      return false;
     }
   }
 
@@ -211,15 +356,20 @@ export class AgentClient extends EventEmitter {
       return;
     }
 
-    this.ws.send(
-      JSON.stringify({
-        type: 'JOIN',
-        agentId: this.config.agentId,
-        agentName: this.config.agentName,
-        role: this.config.role,
-        timestamp: Date.now(),
-      }),
-    );
+    const joinCommand: any = {
+      type: 'JOIN',
+      agentId: this.config.agentId,
+      agentName: this.config.agentName,
+      role: this.config.role,
+      timestamp: Date.now(),
+    };
+
+    // Include metadata if provided
+    if (this.config.metadata) {
+      joinCommand.metadata = this.config.metadata;
+    }
+
+    this.ws.send(JSON.stringify(joinCommand));
   }
 
   /**

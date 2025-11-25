@@ -297,6 +297,74 @@ describe('Protocol - Server Events', () => {
       const result = MessageEventSchema.safeParse(invalid);
       expect(result.success).toBe(false);
     });
+
+    it('should validate MESSAGE event with serverId and messageId', () => {
+      const validEvent = {
+        type: 'MESSAGE',
+        agentId: 'agent-123',
+        agentName: 'Alice',
+        role: 'architect',
+        content: 'Hello',
+        timestamp: Date.now(),
+        serverId: 'server-1',
+        messageId: 'msg-uuid-123',
+      };
+
+      const result = MessageEventSchema.safeParse(validEvent);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.serverId).toBe('server-1');
+        expect(result.data.messageId).toBe('msg-uuid-123');
+      }
+    });
+
+    it('should validate MESSAGE event without serverId and messageId (backward compatibility)', () => {
+      const validEvent = {
+        type: 'MESSAGE',
+        agentId: 'agent-123',
+        agentName: 'Alice',
+        role: 'architect',
+        content: 'Hello',
+        timestamp: Date.now(),
+      };
+
+      const result = MessageEventSchema.safeParse(validEvent);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.serverId).toBeUndefined();
+        expect(result.data.messageId).toBeUndefined();
+      }
+    });
+
+    it('should reject MESSAGE event with invalid serverId type', () => {
+      const invalid = {
+        type: 'MESSAGE',
+        agentId: 'agent-123',
+        agentName: 'Alice',
+        role: 'architect',
+        content: 'Hello',
+        timestamp: Date.now(),
+        serverId: 123, // Should be string
+      };
+
+      const result = MessageEventSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject MESSAGE event with invalid messageId type', () => {
+      const invalid = {
+        type: 'MESSAGE',
+        agentId: 'agent-123',
+        agentName: 'Alice',
+        role: 'architect',
+        content: 'Hello',
+        timestamp: Date.now(),
+        messageId: 456, // Should be string
+      };
+
+      const result = MessageEventSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
   });
 
   describe('AGENT_LEFT event', () => {
@@ -390,6 +458,245 @@ describe('Protocol - Server Events', () => {
 
       const result = ServerEventSchema.safeParse(invalid);
       expect(result.success).toBe(false);
+    });
+  });
+});
+
+/**
+ * Multi-Room Protocol Tests
+ * Added for Milestone 2 - Multi-Room Support
+ */
+describe('Protocol - Multi-Room Commands', () => {
+  describe('JOIN command with roomId', () => {
+    it('should validate JOIN command with optional roomId', () => {
+      const validJoin = {
+        type: 'JOIN',
+        agentId: 'agent-123',
+        agentName: 'Alice',
+        role: 'architect',
+        roomId: 'room-microservices',
+        timestamp: Date.now(),
+      };
+
+      const result = JoinCommandSchema.safeParse(validJoin);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.roomId).toBe('room-microservices');
+      }
+    });
+
+    it('should allow JOIN without roomId (defaults to "default")', () => {
+      const validJoin = {
+        type: 'JOIN',
+        agentId: 'agent-123',
+        agentName: 'Alice',
+        role: 'architect',
+        timestamp: Date.now(),
+      };
+
+      const result = JoinCommandSchema.safeParse(validJoin);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('CREATE_ROOM command', () => {
+    it('should validate valid CREATE_ROOM command', () => {
+      const validCreate = {
+        type: 'CREATE_ROOM',
+        roomId: 'room-architecture',
+        topic: 'Should we use microservices?',
+        timestamp: Date.now(),
+      };
+
+      const result = ClientCommandSchema.safeParse(validCreate);
+      expect(result.success).toBe(true);
+    });
+
+    it('should allow CREATE_ROOM without roomId (auto-generated)', () => {
+      const validCreate = {
+        type: 'CREATE_ROOM',
+        topic: 'Should we use microservices?',
+        timestamp: Date.now(),
+      };
+
+      const result = ClientCommandSchema.safeParse(validCreate);
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject CREATE_ROOM without topic', () => {
+      const invalid = {
+        type: 'CREATE_ROOM',
+        roomId: 'room-architecture',
+        timestamp: Date.now(),
+      };
+
+      const result = ClientCommandSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('LIST_ROOMS command', () => {
+    it('should validate valid LIST_ROOMS command', () => {
+      const validList = {
+        type: 'LIST_ROOMS',
+        timestamp: Date.now(),
+      };
+
+      const result = ClientCommandSchema.safeParse(validList);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('LEAVE_ROOM command', () => {
+    it('should validate valid LEAVE_ROOM command with roomId', () => {
+      const validLeave = {
+        type: 'LEAVE_ROOM',
+        agentId: 'agent-123',
+        roomId: 'room-architecture',
+        timestamp: Date.now(),
+      };
+
+      const result = ClientCommandSchema.safeParse(validLeave);
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject LEAVE_ROOM without roomId', () => {
+      const invalid = {
+        type: 'LEAVE_ROOM',
+        agentId: 'agent-123',
+        timestamp: Date.now(),
+      };
+
+      const result = ClientCommandSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject LEAVE_ROOM without agentId', () => {
+      const invalid = {
+        type: 'LEAVE_ROOM',
+        roomId: 'room-architecture',
+        timestamp: Date.now(),
+      };
+
+      const result = ClientCommandSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+  });
+});
+
+describe('Protocol - Multi-Room Events', () => {
+  describe('ROOM_CREATED event', () => {
+    it('should validate valid ROOM_CREATED event', () => {
+      const validEvent = {
+        type: 'ROOM_CREATED',
+        roomId: 'room-architecture',
+        topic: 'Should we use microservices?',
+        timestamp: Date.now(),
+      };
+
+      const result = ServerEventSchema.safeParse(validEvent);
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject ROOM_CREATED without roomId', () => {
+      const invalid = {
+        type: 'ROOM_CREATED',
+        topic: 'Should we use microservices?',
+        timestamp: Date.now(),
+      };
+
+      const result = ServerEventSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject ROOM_CREATED without topic', () => {
+      const invalid = {
+        type: 'ROOM_CREATED',
+        roomId: 'room-architecture',
+        timestamp: Date.now(),
+      };
+
+      const result = ServerEventSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('ROOM_LIST event', () => {
+    it('should validate valid ROOM_LIST event with rooms', () => {
+      const validEvent = {
+        type: 'ROOM_LIST',
+        rooms: [
+          {
+            roomId: 'room-1',
+            topic: 'Microservices',
+            agentCount: 3,
+          },
+          {
+            roomId: 'room-2',
+            topic: 'Architecture',
+            agentCount: 2,
+          },
+        ],
+        timestamp: Date.now(),
+      };
+
+      const result = ServerEventSchema.safeParse(validEvent);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate ROOM_LIST event with empty rooms array', () => {
+      const validEvent = {
+        type: 'ROOM_LIST',
+        rooms: [],
+        timestamp: Date.now(),
+      };
+
+      const result = ServerEventSchema.safeParse(validEvent);
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject ROOM_LIST without rooms array', () => {
+      const invalid = {
+        type: 'ROOM_LIST',
+        timestamp: Date.now(),
+      };
+
+      const result = ServerEventSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject ROOM_LIST with invalid room structure', () => {
+      const invalid = {
+        type: 'ROOM_LIST',
+        rooms: [
+          {
+            roomId: 'room-1',
+            // Missing topic and agentCount
+          },
+        ],
+        timestamp: Date.now(),
+      };
+
+      const result = ServerEventSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('WELCOME event with roomId', () => {
+    it('should validate WELCOME event with roomId', () => {
+      const validEvent = {
+        type: 'WELCOME',
+        roomId: 'room-architecture',
+        topic: 'Should we use microservices?',
+        agentCount: 1,
+        timestamp: Date.now(),
+      };
+
+      const result = WelcomeEventSchema.safeParse(validEvent);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.roomId).toBe('room-architecture');
+      }
     });
   });
 });

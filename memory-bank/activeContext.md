@@ -1,21 +1,24 @@
 # Active Context
 
 ## Current Focus
-**Milestone 1: Two Agents, One Room, One Conversation**
+**Milestone 4: Multi-Agent Dynamics** ✅ COMPLETED
 
-Building the foundation of PingPong with minimal but complete functionality:
-- Server that manages a single room with a topic
-- Two agent clients that connect via WebSocket
-- Basic conversation loop with LLM-generated responses
-- Streaming output to terminal
-- Graceful lifecycle management
+Implemented intelligent conversation dynamics with:
+- @mention parsing for directed communication
+- Role-based relevance filtering
+- Multi-agent coordination (4+ agents tested)
+- Conversation flow tracking
+- Smart response decisions
 
 ## Recent Changes
-- **2025-11-24**: Project kickoff and documentation setup
-  - Created comprehensive memory-bank documentation
-  - Defined 6-milestone roadmap
-  - Established tech stack: Node.js/TypeScript + WebSockets + SQLite + Ollama
-  - Confirmed architecture: separate processes for server and agents
+- **2025-11-24**: Milestone 4 completion
+  - ✅ Created MentionParser with regex-based @mention extraction (21 unit tests)
+  - ✅ Built RelevanceFilter with role-based keyword matching (14 unit tests)
+  - ✅ Integrated relevance filter into AgentRuntime
+  - ✅ Added 30-second response cooldown to prevent spam
+  - ✅ Created comprehensive 4-agent integration test
+  - ✅ Fixed TypeScript exactOptionalPropertyTypes issues
+  - ✅ Updated existing tests for relevance filter compatibility
 
 ## Next Steps
 1. [ ] **Set up project structure**

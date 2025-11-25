@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { WebSocket, WebSocketServer } from 'ws';
 import { Room } from '../../server/room.js';
 import type { ServerEvent, ClientCommand } from '../../shared/protocol.js';
+import { InMemoryMessageBus, type BusMessage } from '../../shared/message-bus.js';
 
 /**
  * Helper to wait for WebSocket to be open
@@ -483,6 +484,221 @@ describe('Room', () => {
 
       expect(closed.length).toBe(2);
       expect(room.agentCount).toBe(0);
+    });
+  });
+
+  describe('MessageBus integration', () => {
+    let bus: InMemoryMessageBus;
+    let roomWithBus: Room;
+
+    beforeEach(async () => {
+      bus = new InMemoryMessageBus();
+      await bus.connect();
+      // Room constructor will need to accept bus and serverId parameters
+      roomWithBus = new Room(roomId, topic, bus, 'server-1');
+    });
+
+    afterEach(async () => {
+      roomWithBus.shutdown();
+      await bus.disconnect();
+    });
+
+    it('should publish MESSAGE events to bus with serverId and messageId', async () => {
+      const publishedMessages: BusMessage[] = [];
+
+      bus.subscribe((msg) => {
+        publishedMessages.push(msg);
+      });
+
+      const ws1 = {
+        send: () => {},
+        readyState: WebSocket.OPEN,
+        close: () => {},
+      } as unknown as WebSocket;
+
+      // Join agent
+      roomWithBus.handleCommand(ws1, {
+        type: 'JOIN',
+        agentId: 'agent-1',
+        agentName: 'Alice',
+        role: 'architect',
+        timestamp: Date.now(),
+      });
+
+      // Send message
+      roomWithBus.handleCommand(ws1, {
+        type: 'MESSAGE',
+        agentId: 'agent-1',
+        content: 'Test message',
+        timestamp: Date.now(),
+      });
+
+      // Wait for async bus delivery
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(publishedMessages).toHaveLength(1);
+      expect(publishedMessages[0].serverId).toBe('server-1');
+      expect(publishedMessages[0].messageId).toBeDefined();
+      expect(publishedMessages[0].payload.type).toBe('MESSAGE');
+      expect(publishedMessages[0].payload.content).toBe('Test message');
+    });
+
+    it('should broadcast messages from bus to local agents', async () => {
+      const messages: string[] = [];
+
+      const ws1 = {
+        send: (data: string) => messages.push(data),
+        readyState: WebSocket.OPEN,
+        close: () => {},
+      } as unknown as WebSocket;
+
+      // Join agent
+      roomWithBus.handleCommand(ws1, {
+        type: 'JOIN',
+        agentId: 'agent-1',
+        agentName: 'Alice',
+        role: 'architect',
+        timestamp: Date.now(),
+      });
+
+      messages.length = 0; // Clear WELCOME message
+
+      // Simulate message from another server via bus
+      await bus.publish({
+        serverId: 'server-2', // Different server
+        messageId: 'msg-from-server-2',
+        timestamp: Date.now(),
+        payload: {
+          type: 'MESSAGE',
+          agentId: 'agent-remote',
+          agentName: 'RemoteAgent',
+          role: 'critic',
+          content: 'Hello from server 2',
+          timestamp: Date.now(),
+        },
+      });
+
+      // Wait for async delivery
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Local agent should receive the message
+      expect(messages.length).toBe(1);
+      const msg = JSON.parse(messages[0]);
+      expect(msg.type).toBe('MESSAGE');
+      expect(msg.content).toBe('Hello from server 2');
+      expect(msg.agentName).toBe('RemoteAgent');
+    });
+
+    it('should filter out echo messages from same serverId', async () => {
+      const messages: string[] = [];
+
+      const ws1 = {
+        send: (data: string) => messages.push(data),
+        readyState: WebSocket.OPEN,
+        close: () => {},
+      } as unknown as WebSocket;
+
+      // Join agent
+      roomWithBus.handleCommand(ws1, {
+        type: 'JOIN',
+        agentId: 'agent-1',
+        agentName: 'Alice',
+        role: 'architect',
+        timestamp: Date.now(),
+      });
+
+      messages.length = 0;
+
+      // Simulate message from same server (echo)
+      await bus.publish({
+        serverId: 'server-1', // Same server ID
+        messageId: 'msg-echo',
+        timestamp: Date.now(),
+        payload: {
+          type: 'MESSAGE',
+          agentId: 'agent-1',
+          agentName: 'Alice',
+          role: 'architect',
+          content: 'Echo message',
+          timestamp: Date.now(),
+        },
+      });
+
+      // Wait for async delivery
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Should not receive echo message
+      expect(messages.length).toBe(0);
+    });
+
+    it('should deduplicate messages using messageId', async () => {
+      const messages: string[] = [];
+
+      const ws1 = {
+        send: (data: string) => messages.push(data),
+        readyState: WebSocket.OPEN,
+        close: () => {},
+      } as unknown as WebSocket;
+
+      // Join agent
+      roomWithBus.handleCommand(ws1, {
+        type: 'JOIN',
+        agentId: 'agent-1',
+        agentName: 'Alice',
+        role: 'architect',
+        timestamp: Date.now(),
+      });
+
+      messages.length = 0;
+
+      const duplicateMessage: BusMessage = {
+        serverId: 'server-2',
+        messageId: 'msg-duplicate',
+        timestamp: Date.now(),
+        payload: {
+          type: 'MESSAGE',
+          agentId: 'agent-remote',
+          agentName: 'RemoteAgent',
+          role: 'critic',
+          content: 'Duplicate message',
+          timestamp: Date.now(),
+        },
+      };
+
+      // Publish same message twice
+      await bus.publish(duplicateMessage);
+      await bus.publish(duplicateMessage);
+
+      // Wait for async delivery
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Should only receive once
+      expect(messages.length).toBe(1);
+    });
+
+    it('should work without MessageBus (backward compatibility)', () => {
+      // Room without bus should work as before
+      const roomWithoutBus = new Room('room-no-bus', 'Test topic');
+
+      const messages: string[] = [];
+      const ws1 = {
+        send: (data: string) => messages.push(data),
+        readyState: WebSocket.OPEN,
+        close: () => {},
+      } as unknown as WebSocket;
+
+      roomWithoutBus.handleCommand(ws1, {
+        type: 'JOIN',
+        agentId: 'agent-1',
+        agentName: 'Alice',
+        role: 'architect',
+        timestamp: Date.now(),
+      });
+
+      expect(messages.length).toBe(1); // WELCOME message
+      expect(roomWithoutBus.agentCount).toBe(1);
+
+      roomWithoutBus.shutdown();
     });
   });
 });

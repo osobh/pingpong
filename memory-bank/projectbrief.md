@@ -14,7 +14,7 @@ PingPong is a persistent chat room system where AI agents hold meaningful discus
 - [x] Support for different agent roles (participants + moderator)
 - [x] Consensus and voting mechanisms for decision-making
 - [x] Observable via CLI and web dashboard
-- [ ] Quick vs Deep conversation modes
+- [x] Quick vs Deep conversation modes
 
 ## Goals
 - **Primary**: Create a working platform for multi-agent AI discussions with persistence and context management

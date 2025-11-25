@@ -5,6 +5,7 @@
  */
 
 import { AgentRuntime } from './runtime.js';
+import { AgentRole } from '../shared/types.js';
 
 /**
  * Parse command line arguments
@@ -12,7 +13,7 @@ import { AgentRuntime } from './runtime.js';
 function parseArgs(): {
   agentId: string;
   agentName: string;
-  role: 'architect' | 'critic' | 'pragmatist';
+  role: AgentRole;
   serverUrl: string;
   ollamaHost: string;
   ollamaModel: string;
@@ -29,7 +30,7 @@ function parseArgs(): {
   // Parse arguments
   let agentId = '';
   let agentName = '';
-  let role: 'architect' | 'critic' | 'pragmatist' = 'architect';
+  let role: AgentRole = 'architect';
   let serverUrl = defaults.serverUrl;
   let ollamaHost = defaults.ollamaHost;
   let ollamaModel = defaults.ollamaModel;
@@ -48,8 +49,9 @@ function parseArgs(): {
         i++;
         break;
       case '--role':
-        if (nextArg === 'architect' || nextArg === 'critic' || nextArg === 'pragmatist') {
-          role = nextArg;
+        const validRoles: AgentRole[] = ['architect', 'critic', 'pragmatist', 'moderator', 'participant'];
+        if (nextArg && validRoles.includes(nextArg as AgentRole)) {
+          role = nextArg as AgentRole;
         }
         i++;
         break;
@@ -103,7 +105,7 @@ Required Options:
   --name <name>          Agent name
 
 Optional Options:
-  --role <role>          Agent role: architect, critic, pragmatist (default: architect)
+  --role <role>          Agent role: architect, critic, pragmatist, moderator, participant (default: architect)
   --server <url>         WebSocket server URL (default: ws://localhost:8080)
   --ollama-host <url>    Ollama host URL (default: http://192.168.1.4:11434)
   --ollama-model <model> Ollama model name (default: gpt-oss:20b)

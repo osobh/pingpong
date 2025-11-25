@@ -56,6 +56,16 @@ describe('AgentLLM', () => {
 
       expect(pragmatist).toBeDefined();
     });
+
+    it('should create AgentLLM with moderator role', () => {
+      const moderator = new AgentLLM({
+        host: OLLAMA_HOST,
+        model: MODEL,
+        role: 'moderator',
+      });
+
+      expect(moderator).toBeDefined();
+    });
   });
 
   describe('Basic operations', () => {
@@ -128,6 +138,21 @@ describe('AgentLLM', () => {
 
       const response = await pragmatist.generateResponse(
         'Architect wants microservices, Critic warns of complexity. What should we do?',
+      );
+
+      expect(response).toBeTruthy();
+      expect(response.length).toBeGreaterThan(20);
+    });
+
+    it('should use moderator system prompt', async () => {
+      const moderator = new AgentLLM({
+        host: OLLAMA_HOST,
+        model: MODEL,
+        role: 'moderator',
+      });
+
+      const response = await moderator.generateResponse(
+        'We are discussing microservices vs monolith. Guide the discussion.',
       );
 
       expect(response).toBeTruthy();

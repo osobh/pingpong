@@ -7,31 +7,37 @@
   - Established tech stack and architecture decisions
   - Clarified user requirements via Q&A
 
+## Completed Features ✓
+- [x] **Milestone 1: Two Agents, One Room, One Conversation** (2025-11-24)
+  - Project setup (TypeScript, npm, directories)
+  - WebSocket protocol definition
+  - Minimal server implementation
+  - Minimal agent client implementation
+  - Basic conversation loop
+  - M1 must-haves (timestamps, roles, limits)
+  - Manual validation with real LLMs
+
+- [x] **Milestone 2: Multi-Room Support, Agent Memory, and Consensus** (2025-11-24)
+  - Multi-room support with Redis pub/sub
+  - Agent conversation memory
+  - Consensus mechanism (proposals and voting)
+  - SQLite persistence for rooms and messages
+  - Context recovery and message history
+
+- [x] **Milestone 3: Moderator Agent** (2025-11-24)
+  - Moderator role support in agent system
+  - Conversation flow tracking (ConversationFlowTracker)
+  - Stall detection logic
+  - Circular discussion detection
+  - Topic extraction and tracking
+  - Integration with consensus mechanism
+  - Moderator receives flow context and proposal status
+  - Comprehensive integration testing
+
 ## In Progress 🔄
-- [ ] **Milestone 1: Two Agents, One Room, One Conversation**
-  - [ ] Project setup (TypeScript, npm, directories)
-  - [ ] WebSocket protocol definition
-  - [ ] Minimal server implementation
-  - [ ] Minimal agent client implementation
-  - [ ] Basic conversation loop
-  - [ ] M1 must-haves (timestamps, roles, limits)
-  - [ ] Manual validation with real LLMs
+- [ ] **None currently**
 
 ## Not Started ⏳
-
-### Milestone 2: Persistence & Context Recovery
-- [ ] SQLite database setup
-- [ ] Message storage implementation
-- [ ] Context summary generation (server-side Ollama call)
-- [ ] Agent leave/rejoin with context recovery
-- [ ] Testing: Agent rejoins mid-conversation with awareness
-
-### Milestone 3: Moderator Agent
-- [ ] Moderator role implementation
-- [ ] Special moderator behaviors (always respond, meta-awareness)
-- [ ] Conversation structuring (summarize, call for input)
-- [ ] Consensus detection logic
-- [ ] Testing: 3-agent discussion with moderator guidance
 
 ### Milestone 4: Multi-Agent Dynamics (3+ agents)
 - [ ] Support for N agents (3-4+)
@@ -94,12 +100,22 @@
 - [ ] Conversation continuity maintained
 - [ ] Leave/rejoin flow tested successfully
 
-### v0.3.0 (Planned) - Milestone 3 Complete
-**Exit criteria**:
-- [ ] Moderator successfully guides 3-agent discussion
-- [ ] Discussion structured through 2-3 sub-topics
-- [ ] Clear decision points visible in transcript
-- [ ] Moderator interventions improve conversation quality
+### v0.3.0 (2025-11-24) - Milestone 3 Complete ✓
+**Implemented features**:
+- [x] Moderator role with specialized system prompt
+- [x] ConversationFlowTracker for monitoring conversation patterns
+- [x] Stall detection (configurable threshold, default 30s)
+- [x] Circular discussion detection using keyword analysis
+- [x] Active topic extraction and tracking
+- [x] Integration with consensus/voting system
+- [x] Flow context provided to moderator LLM
+- [x] Comprehensive unit and integration tests (29 new tests)
+
+**Exit criteria met**:
+- [x] Moderator can detect stalled conversations
+- [x] Moderator can identify circular discussions
+- [x] Moderator receives flow and consensus context
+- [x] Integration tests verify all components work together
 
 ### v0.4.0 (Planned) - Milestone 4 Complete
 **Exit criteria**:
