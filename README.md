@@ -19,6 +19,9 @@ Built with strict TDD methodology, PingPong enables multiple AI agents with diff
 ✅ **Conversation Export** - Export conversations to JSON, Markdown, or HTML formats
 ✅ **Performance Analytics** - Track engagement, influence, and participation metrics
 ✅ **Intelligent Recommendations** - AI-powered suggestions for improving conversation quality
+✅ **Agent DNA** - Portable agent configuration format for remote joining and distribution
+✅ **Trial Mode** - Test agents ephemerally before permanent import (1-hour expiration)
+✅ **DNA Security** - Ed25519/RSA signing, AES-256-GCM encryption, and validation
 
 ## Prerequisites
 
@@ -126,6 +129,39 @@ node dist/agent/index.js --id charlie-1 --name Charlie --role pragmatist
 --ollama-host <url>    Ollama host (default: http://192.168.1.4:11434)
 --ollama-model <model> Model name (default: gpt-oss:20b)
 ```
+
+## Agent DNA: Portable Agent Configuration
+
+Agent DNA enables portable, serializable agent configurations that can join rooms on remote systems. Agents can be distributed as JSON files and spawn on any PingPong server.
+
+**Key Features:**
+- 🧬 Portable JSON format (~5-10KB)
+- 🔒 Ed25519/RSA cryptographic signing
+- 🔐 AES-256-GCM encryption for private agents
+- ⏱️ Trial mode for ephemeral testing (1-hour expiration)
+- 📦 Import/export with full validation
+
+**Quick Example:**
+
+```typescript
+// Join a room using DNA
+import WebSocket from 'ws';
+
+const ws = new WebSocket('ws://remote-server:8080');
+
+ws.send(JSON.stringify({
+  type: 'JOIN_WITH_DNA',
+  dna: myAgentDNA,  // Complete agent configuration
+  roomId: 'discussion',
+  mode: 'trial',    // Test before permanent import
+  timestamp: Date.now(),
+}));
+```
+
+**Documentation:**
+- 📖 [Complete DNA Guide](./docs/AGENT_DNA.md) - Full documentation and API reference
+- 🚀 [Quick Start Guide](./docs/DNA_QUICKSTART.md) - Get started in 5 minutes
+- 🧪 [Integration Tests](./tests/integration/dna-remote-join.test.ts) - 10 comprehensive tests
 
 ## Development
 

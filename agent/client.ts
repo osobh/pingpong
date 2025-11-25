@@ -207,6 +207,78 @@ export class AgentClient extends EventEmitter {
   }
 
   /**
+   * Bulk create multiple memories
+   * @param memories Array of memory data to create
+   * @returns Promise<boolean> - true if sent successfully, false otherwise
+   */
+  async bulkCreateMemories(
+    memories: Array<{
+      memoryType: 'decision' | 'insight' | 'question' | 'action_item';
+      content: string;
+      context?: string;
+      summary?: string;
+      priority?: 'low' | 'medium' | 'high' | 'critical';
+      tags?: string[];
+      relatedMessageIds?: string[];
+      relatedAgentIds?: string[];
+    }>,
+  ): Promise<boolean> {
+    if (!this._isConnected || !this.ws) {
+      return false;
+    }
+
+    try {
+      this.ws.send(
+        JSON.stringify({
+          type: 'BULK_CREATE_MEMORIES',
+          agentId: this.config.agentId,
+          memories,
+          timestamp: Date.now(),
+        }),
+      );
+      return true;
+    } catch (error) {
+      this.emit('error', error as Error);
+      return false;
+    }
+  }
+
+  /**
+   * Bulk update multiple memories
+   * @param updates Array of memory updates
+   * @returns Promise<boolean> - true if sent successfully, false otherwise
+   */
+  async bulkUpdateMemories(
+    updates: Array<{
+      memoryId: string;
+      content?: string;
+      context?: string;
+      summary?: string;
+      priority?: 'low' | 'medium' | 'high' | 'critical';
+      tags?: string[];
+    }>,
+  ): Promise<boolean> {
+    if (!this._isConnected || !this.ws) {
+      return false;
+    }
+
+    try {
+      this.ws.send(
+        JSON.stringify({
+          type: 'BULK_UPDATE_MEMORIES',
+          agentId: this.config.agentId,
+          updates,
+          timestamp: Date.now(),
+        }),
+      );
+      return true;
+    } catch (error) {
+      this.emit('error', error as Error);
+      return false;
+    }
+  }
+
+  /**
    * Set up WebSocket event listeners
    */
   private setupListeners(): void {
@@ -314,10 +386,37 @@ export class AgentClient extends EventEmitter {
         });
         break;
 
+      case 'MEMORY_RECORDED':
+        this.emit('memory_recorded', {
+          memoryId: event.memoryId,
+          memoryType: event.memoryType,
+          content: event.content,
+          summary: event.summary,
+          priority: event.priority,
+          tags: event.tags,
+          createdBy: event.createdBy,
+          createdByName: event.createdByName,
+          timestamp: event.timestamp,
+        });
+        break;
+
+      case 'BULK_MEMORIES_RESULT':
+        this.emit('bulk_memories_result', {
+          operation: event.operation,
+          successful: event.successful,
+          failed: event.failed,
+          results: event.results,
+          timestamp: event.timestamp,
+        });
+        break;
+
       case 'ERROR':
         this.emit('error', new Error(event.message));
         break;
     }
+
+    // Also emit generic 'event' for backwards compatibility and flexibility
+    this.emit('event', event);
   }
 
   /**

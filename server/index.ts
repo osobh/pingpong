@@ -10,6 +10,8 @@ import { InMemoryMessageBus, RedisMessageBus, type MessageBus } from '../shared/
 import type { ClientCommand } from '../shared/protocol.js';
 import type { ConversationMode } from '../shared/types.js';
 import { createHTTPServer } from './http-server.js';
+import { DNAHandler } from './dna-handler.js';
+import { RuntimeSpawner } from './runtime-spawner.js';
 
 /**
  * WebSocket connection context
@@ -67,6 +69,19 @@ export async function startServer(
   const wss = new WebSocketServer({ port });
   const roomManager = new RoomManager();
   const connectionContexts = new WeakMap<WebSocket, ConnectionContext>();
+
+  // Initialize DNA components
+  const dnaHandler = new DNAHandler({
+    requireSignature: false, // Allow unsigned DNA for now
+    autoApproveTrial: true, // Auto-approve trial mode
+    requireAdminReview: false, // Disable admin review for MVP
+  });
+
+  const runtimeSpawner = new RuntimeSpawner({
+    trialDuration: 60 * 60 * 1000, // 1 hour
+    maxTrialAgents: 10,
+    autoCleanup: true,
+  });
 
   // Create default room if topic provided (backward compatibility)
   if (topic) {
@@ -141,6 +156,18 @@ export async function startServer(
       case 'LEAVE':
         // These require room context
         handleRoomCommand(ws, command);
+        break;
+
+      case 'JOIN_WITH_DNA':
+        handleJoinWithDNA(ws, command);
+        break;
+
+      case 'DNA_APPROVE':
+        handleDNAApprove(ws, command);
+        break;
+
+      case 'DNA_REJECT':
+        handleDNAReject(ws, command);
         break;
     }
   }
@@ -294,6 +321,209 @@ export async function startServer(
   }
 
   /**
+   * Handle JOIN_WITH_DNA command
+   */
+  async function handleJoinWithDNA(ws: WebSocket, command: any): Promise<void> {
+    try {
+      const dna = command.dna;
+      const mode: 'trial' | 'permanent' = command.mode || 'trial';
+      const roomId = command.roomId || 'default';
+
+      // Validate DNA
+      const validation = await dnaHandler.validateDNA(dna);
+      if (!validation.valid) {
+        ws.send(
+          JSON.stringify({
+            type: 'ERROR',
+            message: `DNA validation failed: ${validation.errors.join(', ')}`,
+            timestamp: Date.now(),
+          }),
+        );
+        return;
+      }
+
+      // Submit for review
+      const review = await dnaHandler.submitForReview(dna, mode);
+
+      if (review.autoApproved) {
+        // Auto-approved - spawn agent immediately
+        const { agent, metadata } = runtimeSpawner.spawnFromDNA(dna, mode);
+
+        // Get or check room exists
+        const room = roomManager.getRoom(roomId);
+        if (!room) {
+          ws.send(
+            JSON.stringify({
+              type: 'ERROR',
+              message: `Room ${roomId} does not exist`,
+              timestamp: Date.now(),
+            }),
+          );
+          return;
+        }
+
+        // Update connection context
+        const context = connectionContexts.get(ws);
+        if (context) {
+          context.roomId = roomId;
+        }
+
+        // Create JOIN command for the room
+        const joinCommand = {
+          type: 'JOIN' as const,
+          agentId: agent.agentId,
+          agentName: agent.name,
+          role: agent.role,
+          metadata,
+          timestamp: Date.now(),
+        };
+
+        // Send DNA_APPROVED event first
+        ws.send(
+          JSON.stringify({
+            type: 'DNA_APPROVED',
+            requestId: review.requestId,
+            agentId: agent.agentId,
+            agentName: agent.name,
+            mode,
+            approvedBy: 'auto-approval',
+            timestamp: Date.now(),
+          }),
+        );
+
+        // Small delay to ensure event ordering
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // Send AGENT_JOINED_DNA event
+        ws.send(
+          JSON.stringify({
+            type: 'AGENT_JOINED_DNA',
+            agentId: agent.agentId,
+            agentName: agent.name,
+            role: agent.role,
+            dnaVersion: dna.dna_version,
+            mode,
+            creator: dna.creator.name,
+            metadata,
+            timestamp: Date.now(),
+          }),
+        );
+
+        // Join the room (this will send WELCOME)
+        room.handleCommand(ws, joinCommand);
+
+        console.log(
+          `Agent spawned from DNA: ${agent.name} (${agent.agentId}) in ${mode} mode`,
+        );
+      } else {
+        // Requires admin review
+        ws.send(
+          JSON.stringify({
+            type: 'DNA_REVIEW_REQUEST',
+            requestId: review.requestId,
+            dna,
+            mode,
+            timestamp: Date.now(),
+          }),
+        );
+
+        console.log(`DNA submitted for review: ${dna.metadata.name} (${review.requestId})`);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to process DNA';
+      ws.send(
+        JSON.stringify({
+          type: 'ERROR',
+          message: errorMessage,
+          timestamp: Date.now(),
+        }),
+      );
+      console.error('JOIN_WITH_DNA error:', error);
+    }
+  }
+
+  /**
+   * Handle DNA_APPROVE command
+   */
+  async function handleDNAApprove(ws: WebSocket, command: any): Promise<void> {
+    try {
+      const { requestId, adminId, mode } = command;
+
+      // Approve the request
+      const request = await dnaHandler.approveRequest(requestId, adminId);
+
+      // Spawn agent from approved DNA
+      const { agent } = runtimeSpawner.spawnFromDNA(request.dna, mode);
+
+      // Send DNA_APPROVED event
+      ws.send(
+        JSON.stringify({
+          type: 'DNA_APPROVED',
+          requestId,
+          agentId: agent.agentId,
+          agentName: agent.name,
+          mode,
+          approvedBy: adminId,
+          timestamp: Date.now(),
+        }),
+      );
+
+      console.log(
+        `DNA approved by ${adminId}: ${agent.name} (${agent.agentId}) in ${mode} mode`,
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to approve DNA';
+      ws.send(
+        JSON.stringify({
+          type: 'ERROR',
+          message: errorMessage,
+          timestamp: Date.now(),
+        }),
+      );
+      console.error('DNA_APPROVE error:', error);
+    }
+  }
+
+  /**
+   * Handle DNA_REJECT command
+   */
+  async function handleDNAReject(ws: WebSocket, command: any): Promise<void> {
+    try {
+      const { requestId, adminId, reason } = command;
+
+      // Reject the request
+      const request = await dnaHandler.rejectRequest(requestId, adminId, reason);
+
+      // Send DNA_REJECTED event
+      ws.send(
+        JSON.stringify({
+          type: 'DNA_REJECTED',
+          requestId,
+          dnaId: request.dna.id,
+          dnaName: request.dna.metadata.name,
+          reason,
+          rejectedBy: adminId,
+          timestamp: Date.now(),
+        }),
+      );
+
+      console.log(
+        `DNA rejected by ${adminId}: ${request.dna.metadata.name} - ${reason}`,
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to reject DNA';
+      ws.send(
+        JSON.stringify({
+          type: 'ERROR',
+          message: errorMessage,
+          timestamp: Date.now(),
+        }),
+      );
+      console.error('DNA_REJECT error:', error);
+    }
+  }
+
+  /**
    * Handle WebSocket disconnect
    */
   function handleDisconnect(ws: WebSocket): void {
@@ -314,6 +544,7 @@ export async function startServer(
   const shutdown = async () => {
     console.log('\nShutting down server...');
     roomManager.shutdown();
+    runtimeSpawner.shutdown();
 
     // Disconnect from message bus (only if we created it)
     if (bus && shouldDisconnectBus) {

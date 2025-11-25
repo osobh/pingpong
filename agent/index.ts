@@ -24,7 +24,7 @@ function parseArgs(): {
   const defaults = {
     serverUrl: 'ws://localhost:8080',
     ollamaHost: process.env['OLLAMA_HOST'] || 'http://192.168.1.4:11434',
-    ollamaModel: process.env['OLLAMA_MODEL'] || 'gpt-oss:20b',
+    ollamaModel: process.env['OLLAMA_MODEL'] || 'deepseek-r1:latest',
   };
 
   // Parse arguments
@@ -108,7 +108,7 @@ Optional Options:
   --role <role>          Agent role: architect, critic, pragmatist, moderator, participant (default: architect)
   --server <url>         WebSocket server URL (default: ws://localhost:8080)
   --ollama-host <url>    Ollama host URL (default: http://192.168.1.4:11434)
-  --ollama-model <model> Ollama model name (default: gpt-oss:20b)
+  --ollama-model <model> Ollama model name (default: deepseek-r1:latest)
   -h, --help            Show this help message
 
 Environment Variables:
